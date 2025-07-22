@@ -4,6 +4,8 @@ import numpy as np
 import geopandas as gpd
 import math
 import matplotlib.pyplot as plt
+import folium 
+from streamlit_folium import st_folium 
 from sklearn.metrics import silhouette_score, davies_bouldin_score
 from sktime.clustering.spatio_temporal import STDBSCAN
 from kneed import KneeLocator
@@ -45,13 +47,62 @@ if csv_file:
 
     # --- 3. Spatial Cleaning ---
     st.header("1️⃣ Pembersihan Koordinat Hotspot Dengan Lahan Gambut Sumatera Selatan")
+    SHAPEFILE_GAMBUT_PATH = "Data_shapefile/gambutsumsel.shp"
+    SHAPEFILE_SUMSEL_PATH = "Sumatera_Selatan/sumselkabupatenshp.shp" # <-- Ganti dengan path Anda
+
+    # Muat data CSV jika belum ada
+    if 'df' not in locals():
+        st.warning("Silakan unggah file CSV terlebih dahulu.")
+        st.stop()
+    try:
+        gdf_gambut = gpd.read_file(SHAPEFILE_GAMBUT_PATH).to_crs("EPSG:4326")
+        gdf_sumsel = gpd.read_file(SHAPEFILE_SUMSEL_PATH).to_crs("EPSG:4326")
+        st.success("Shapefile lahan gambut dan batas wilayah berhasil dimuat 🎉.")
+    except Exception as e:
+        st.error(f"Terjadi kesalahan saat memuat shapefile: {e}")
+        st.stop()
     df['geometry'] = df.apply(lambda x: Point(x['longitude'], x['latitude']), axis=1)
-    gdf = gpd.GeoDataFrame(df, geometry='geometry', crs=gdf_boundary.crs)
-    boundary_union = gdf_boundary.unary_union
+    gdf = gpd.GeoDataFrame(df, geometry='geometry', crs=gdf_gambut.crs)
+    boundary_union = gdf_gambut.unary_union
     gdf_clean = gdf[gdf.within(boundary_union)].copy()
+
     st.write(f"📌 Dimensi data sebelum dibersihkan : {len(gdf)}")
     st.write(f"📌 Dimensi data Setelah dibersihkan : {len(gdf_clean)}")
-    st.map(gdf_clean[['latitude', 'longitude']])
+
+    centroid = gdf_sumsel.geometry.unary_union.centroid
+    m = folium.Map(location=[centroid.y, centroid.x], zoom_start=7, tiles="OpenStreetMap")
+    folium.GeoJson(
+        gdf_sumsel,
+        name="Batas Kabupaten Sumsel",
+        style_function=lambda f: {
+            "fillColor": "#FFFADC",
+            "color": "black",
+            "weight": 1,
+            "fillOpacity": 0.2
+        }
+    ).add_to(m)
+    folium.GeoJson(
+        gdf_gambut,
+        name="Lahan Gambut",
+        style_function=lambda f: {
+            "fillColor": "#B6F500",
+            "color": "#006400",
+            "weight": 1,
+            "fillOpacity": 0.4 # Opacity sedikit dinaikkan agar lebih terlihat
+        }
+    ).add_to(m)
+    for idx, row in gdf_clean.iterrows():
+        folium.CircleMarker(
+            location=[row['latitude'], row['longitude']],
+            radius=2,
+            color='red',
+            fill=True,
+            fill_color='red',
+            fill_opacity=0.7,
+            popup=f"Tanggal: {row['acq_date'].strftime('%Y-%m-%d')}"
+        ).add_to(m)
+    folium.LayerControl().add_to(m)
+    st_folium(m, use_container_width=True, height=500)
 
     # --- 4. Preprocessing ---
     st.header("2️⃣ Prapemrosesan Data (Preprocessing)")
