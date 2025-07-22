@@ -120,7 +120,7 @@ folium.GeoJson(geo_json, style_function=lambda x: {'color':'black','weight':2,'f
 colors = ['gray','blue','red','green','orange','purple']
 for _, row in hotspot.iterrows():
     c = row['cluster']
-    fc = 'gray' if c==-1 else colors[c % len(colors)]
+    fc = 'gray' if c==-1 else cluster_colors[c % len(cluster_colors)]
     folium.CircleMarker(location=(row['latitude'], row['longitude']), radius=3,
                         color=fc, fill=True, fill_opacity=0.7).add_to(m2)
 # Legend (manual)
