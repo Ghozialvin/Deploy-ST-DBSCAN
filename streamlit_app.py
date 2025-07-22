@@ -130,7 +130,7 @@ if csv_file:
     k_dist = avg_k_dist(minpts)
     points = np.arange(1, len(k_dist)+1)
 
-    fig, ax = plt.subplots(figsize=(2, 4))
+    fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(points, k_dist, marker='.')
     knee = KneeLocator(points, k_dist, curve='convex', direction='increasing').knee
     if knee:
@@ -140,7 +140,7 @@ if csv_file:
     ax.set_xlabel('Data Points (sorted)')
     ax.set_ylabel(f'Avg distance to {minpts} NN')
     ax.legend()
-    st.pyplot(fig)
+    st.pyplot(fig,use_container_width=True)
 
     # User adjusts eps1 & eps2
     eps1_slider = st.sidebar.slider("Parameter Epsilon 1", float(k_dist.min()), float(k_dist.max()), float(eps1))
