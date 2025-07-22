@@ -108,7 +108,7 @@ if csv_file:
     
      # Input Parameter dari User di Sidebar
     st.sidebar.subheader("Parameter Clustering")
-    st.sidebar.metric(label="Parameter Epsilon 1 (Otomatis)", value=f"{eps1:.4f}")
+    eps1_slider = st.sidebar.slider("Sesuaikan Parameter Epsilon 1", float(k_dist.min()), float(k_dist.max()), float(eps1))
     eps2_selection = st.sidebar.selectbox(
         "Pilih Parameter Epsilon 2 (Hari)",
         options=[3, 7, 30])
@@ -116,7 +116,7 @@ if csv_file:
     # --- 4. Clustering ST-DBSCAN ---
     st.header("4️⃣ Clustering ST-DBSCAN")
     df_idx = pd.DataFrame(hotspot[['longitude', 'latitude']].values, columns=['x', 'y'], index=pd.MultiIndex.from_arrays([hotspot.index, hotspot['acq_date']], names=['event_id', 'timestamp']))
-    clusterer = STDBSCAN(eps1=eps1, eps2=eps2_selection, min_samples=minpts, metric='euclidean', n_jobs=-1)
+    clusterer = STDBSCAN(eps1=eps1_slider, eps2=eps2_selection, min_samples=minpts, metric='euclidean', n_jobs=-1)
     clusterer.fit(df_idx)
     hotspot['cluster'] = clusterer.labels_
 
