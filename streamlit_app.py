@@ -13,6 +13,11 @@ from shapely.geometry import Point
 # Streamlit App Configuration
 st.set_page_config(page_title="ST-DBSCAN Streamlit App", layout="wide")
 st.title("Aplikasi Clustering Spatio-Temporal Hotspot Dilahan Gambut Sumatera Selatan Menggunakan Algoritma ST-DBSCAN Dengan Optimasi Parameter")
+st.write("="*100)
+st.write("Aplikasi clustering ini merupakan hasil penelitian yang dilakukan oleh Ghozi Alvin Karim, Sebagai Tugas Akhir Sarjana Sains Data Institut Teknologi Sumatera (ITERA).")
+st.write("Dibuat oleh : Ghozi Alvin Karim")
+st.write("Nim : 121450123")
+st.write("Program Studi : Sains Data")
 
 # --- 1. Upload Data (CSV) ---
 st.sidebar.header("1. Unggah Data Hotspot")
