@@ -1,94 +1,128 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import math
 import geopandas as gpd
-from scipy.spatial.distance import cdist
-from sktime.clustering.spatio_temporal import STDBSCAN
+import math
+import matplotlib.pyplot as plt
 from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sktime.clustering.spatio_temporal import STDBSCAN
 from kneed import KneeLocator
+from scipy.spatial.distance import cdist
 from shapely.geometry import Point
 
-# Judul Aplikasi
-st.title("ST-DBSCAN Hotspot Clustering dengan Boundary Filter Lokal")
+st.set_page_config(page_title="ST-DBSCAN Streamlit App", layout="wide")
+st.title("Spatio-Temporal DBSCAN Clustering Application")
 
-# ===== Parameter =====
-# 1. Pilih Epsilon2 (temporal)
-eps2 = st.selectbox(
-    "Pilih Epsilon2 (temporal) dalam hari:", [3, 7, 30]
-)
+# --- 1. Upload Data ---
+st.sidebar.header("1. Upload Hotspot CSV Data")
+csv_file = st.sidebar.file_uploader("Upload hotspot CSV data", type=['csv'])
 
-# 2. Upload CSV hotspot
-df_file = st.file_uploader(
-    "Upload file CSV hotspot (harus memuat kolom latitude, longitude, acq_date):", 
-    type="csv"
-)
+# --- Shapefile Path Input ---
+st.sidebar.header("Shapefile Configuration")
+shp_path = st.sidebar.text_input("Masukkan path folder shapefile (tanpa .shp)", "/content/drive/MyDrive/Berkas TA/Data/Gambut/gambutsumsel")
 
-if df_file is not None:
-    # Baca CSV dan normalisasi nama kolom
-    df = pd.read_csv(df_file)
-    df.columns = df.columns.str.strip().str.lower()
-    required = ["latitude", "longitude", "acq_date"]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        st.error(f"Kolom wajib tidak ditemukan: {', '.join(missing)}")
-        st.stop()
-    df = df.dropna(subset=required)
+if csv_file:
+    # Load CSV
+    with st.spinner("Loading CSV data..."):
+        df = pd.read_csv(csv_file)
+        df['acq_date'] = pd.to_datetime(df['acq_date'])
+    st.success("CSV loaded")
 
-    # ===== Filter menggunakan shapefile lokal =====
+    # Load shapefile by filepath
     try:
-        shapefile_path = "./Data_shapefile/gambutsumsel.shp"
-        gdf_boundary = gpd.read_file(shapefile_path)
-        boundary_union = gdf_boundary.unary_union
-        df["geometry"] = df.apply(lambda r: Point(r.longitude, r.latitude), axis=1)
-        gdf = gpd.GeoDataFrame(df, geometry="geometry", crs=gdf_boundary.crs)
-        df = gdf[gdf.within(boundary_union)].drop(columns=["geometry"])
-        st.write(f"🔹 Titik dalam boundary: {df.shape[0]} dari total {len(df) + 0}")
+        shapefile = f"{shp_path}.shp"
+        gdf_boundary = gpd.read_file(shapefile)
+        st.success(f"Shapefile loaded from {shapefile}")
     except Exception as e:
-        st.warning(f"Gagal membaca shapefile lokal: {e}. Proses clustering dilanjutkan tanpa filter.")
+        st.error(f"Gagal memuat shapefile: {e}")
+        st.stop()
 
-    # ===== Preprocessing tanggal =====
-    df["acq_date"] = pd.to_datetime(df["acq_date"], errors="coerce")
-    df = df.dropna(subset=["acq_date"])
-    df["timestamp"] = ((df["acq_date"] - pd.Timestamp("1970-01-01")) / pd.Timedelta("1D")).astype(int)
+    # --- 2. Cleaning by Boundary ---
+    st.header("2. Spatial Cleaning")
+    df['geometry'] = df.apply(lambda row: Point(row['longitude'], row['latitude']), axis=1)
+    gdf = gpd.GeoDataFrame(df, geometry='geometry', crs=gdf_boundary.crs)
+    union_poly = gdf_boundary.unary_union
+    gdf_clean = gdf[gdf.within(union_poly)].copy()
+    st.write(f"Records before cleaning: {len(gdf)}, after cleaning: {len(gdf_clean)}")
+    st.map(gdf_clean[['latitude', 'longitude']])
 
-    # ===== Hitung parameter ST-DBSCAN =====
-    n = len(df)
-    minpts = max(1, round(math.log(n)))
-    X_k = np.column_stack([df.latitude.values, df.longitude.values, df.timestamp.values])
-    dist_mat = cdist(X_k, X_k, metric="euclidean")
-    def avg_k(mat, K):
-        idx = np.argsort(mat, axis=1)[:, 1:K+1]
-        return np.array([mat[i, idx[i]].mean() for i in range(mat.shape[0])])
-    avg_dist = np.sort(avg_k(dist_mat, minpts))
-    pts = np.arange(1, len(avg_dist) + 1)
-    knee = KneeLocator(pts, avg_dist, curve='convex', direction='increasing').knee
-    eps1 = float(avg_dist[knee-1]) if knee else float(avg_dist.mean())
-    st.write(f"🔵 ε1 spatial+temporal = {eps1:.4f} (knee @ {knee if knee else 'mean'})")
+    # --- 3. Preprocessing ---
+    st.header("3. Preprocessing")
+    drop_cols = ["brightness","scan","track","satellite","instrument",
+                 "version","bright_t31","frp","daynight","type","confidence","acq_time","geometry"]
+    data = gdf_clean.drop(columns=[c for c in drop_cols if c in gdf_clean.columns])
+    data['acq_date'] = data['acq_date'].dt.strftime("%Y%m%d").astype(int)
+    st.write("Selected features:", data.columns.tolist())
+    st.dataframe(data.head())
 
-    # ===== Fit ST-DBSCAN =====
-    idx = pd.MultiIndex.from_arrays([df.index, df.timestamp], names=["event_id", "timestamp"])
-    fit_df = pd.DataFrame(df[["longitude", "latitude"]].values, columns=["x", "y"], index=idx)
-    model = STDBSCAN(eps1=eps1, eps2=eps2, min_samples=minpts, metric="euclidean", n_jobs=-1)
-    model.fit(fit_df)
-    df["cluster"] = model.labels_
+    # --- 4. Parameter Selection ---
+    st.header("4. Parameter Estimation")
+    hotspot = data.copy()
+    n_samples = len(hotspot)
+    minpts = max(2, round(math.log(n_samples)))
+    st.write(f"Estimated MinPts: {minpts}")
 
-    # ===== Evaluasi =====
-    unique_clusters = set(df.cluster)
-    n_clusters = len(unique_clusters) - (1 if -1 in unique_clusters else 0)
-    mask = df.cluster != -1
-    if n_clusters > 1 and mask.sum() > 1:
-        X_eval = np.column_stack([df.latitude[mask], df.longitude[mask], df.timestamp[mask]])
-        sil = silhouette_score(X_eval, df.cluster[mask])
-        dbi = davies_bouldin_score(X_eval, df.cluster[mask])
-        st.write(f"🏷️ Jumlah cluster (excl. noise): {n_clusters}")
-        st.write(f"📃 Silhouette Coefficient: {sil:.4f}")
-        st.write(f"🔍 Davies–Bouldin Index: {dbi:.4f}")
+    # Compute k-distance
+    X = hotspot[['latitude','longitude','acq_date']].values
+    dist_mat = cdist(X, X, 'euclidean')
+    def avg_k_distances(K):
+        nn_idx = np.argsort(dist_mat, axis=1)[:,1:K+1]
+        dists = np.array([[dist_mat[i,j] for j in nn_idx[i]] for i in range(len(X))])
+        return np.sort(dists.mean(axis=1))
+    k_dist = avg_k_distances(minpts)
+    points = np.arange(1, len(k_dist)+1)
+
+    fig, ax = plt.subplots()
+    ax.plot(points, k_dist, marker='.')
+    knee = KneeLocator(points, k_dist, curve='convex', direction='increasing').knee
+    if knee:
+        eps1 = k_dist[knee-1]
+        ax.axhline(eps1, linestyle='--', label=f"eps1={eps1:.3f}")
+        st.write(f"Detected eps1 at index {knee}: {eps1:.3f}")
+    ax.set_xlabel('Data Points (sorted)')
+    ax.set_ylabel(f'Avg distance to {minpts} NN')
+    ax.legend()
+    st.pyplot(fig)
+
+    eps1_slider = st.sidebar.slider("Spatial eps1", float(k_dist.min()), float(k_dist.max()), float(eps1))
+    eps2_slider = st.sidebar.number_input("Temporal eps2 (days)", min_value=1, max_value=30, value=3)
+
+    # --- 5. ST-DBSCAN Clustering ---
+    st.header("5. ST-DBSCAN Clustering")
+    df_idx = pd.DataFrame(
+        hotspot[['longitude','latitude']].values,
+        columns=['x','y'],
+        index=pd.MultiIndex.from_arrays([hotspot.index, hotspot['acq_date']], names=['event_id','timestamp'])
+    )
+    clusterer = STDBSCAN(eps1=eps1_slider, eps2=eps2_slider, min_samples=minpts, metric='euclidean', n_jobs=-1)
+    clusterer.fit(df_idx)
+    hotspot['cluster'] = clusterer.labels_
+
+    st.write("Total clusters:", len(set(clusterer.labels_)) - ( -1 in clusterer.labels_))
+    st.write("Noise points:", sum(clusterer.labels_ == -1))
+    counts = hotspot['cluster'].value_counts().rename_axis('cluster').reset_index(name='count')
+    st.dataframe(counts)
+
+    fig2, ax2 = plt.subplots()
+    sc = ax2.scatter(hotspot['longitude'], hotspot['latitude'], c=hotspot['cluster'], cmap='tab20', s=10)
+    ax2.set_title('Cluster assignments')
+    st.pyplot(fig2)
+
+    # --- 6. Evaluation ---
+    st.header("6. Evaluation")
+    mask = hotspot['cluster'] != -1
+    if mask.sum() > 0:
+        X_eval = np.column_stack([
+            hotspot.loc[mask,'longitude'],
+            hotspot.loc[mask,'latitude'],
+            hotspot.loc[mask,'acq_date']
+        ])
+        y_eval = hotspot.loc[mask,'cluster']
+        sil = silhouette_score(X_eval, y_eval)
+        db = davies_bouldin_score(X_eval, y_eval)
+        st.write(f"Silhouette Coefficient: {sil:.4f}")
+        st.write(f"Davies-Bouldin Index: {db:.4f}")
     else:
-        st.warning("Tidak cukup cluster (minimal 2) untuk evaluasi Silhouette/DB Index.")
-
-    # ===== Tampilkan & Unduh =====
-    st.subheader("Hasil Clustering")
-    st.dataframe(df)
-    csv_out = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Unduh Hasil CSV", data=csv_out, file_name="hasil_clustering.csv", mime='text/csv')
+        st.write("No clusters to evaluate (all noise).")
+else:
+    st.info("Upload hotspot CSV untuk memulai.")
