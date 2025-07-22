@@ -5,6 +5,7 @@ import geopandas as gpd
 import math
 import matplotlib.pyplot as plt
 import folium
+import matplotlib.colors as colors
 from streamlit_folium import st_folium
 from sklearn.metrics import silhouette_score, davies_bouldin_score
 from sktime.clustering.spatio_temporal import STDBSCAN
