@@ -15,8 +15,8 @@ st.set_page_config(page_title="ST-DBSCAN Streamlit App", layout="wide")
 st.title("Application Clustering Spatio-Temporal Hotspot Dilahan Gambut Sumatera Selatan Menggunakan Algoritma ST-DBSCAN Dengan Optimasi Parameter")
 
 # --- 1. Upload Data (CSV) ---
-st.sidebar.header("1. Upload Data Hotspot CSV ")
-csv_file = st.sidebar.file_uploader("❗Upload data hotspot CSV❗", type=["csv"])
+st.sidebar.header("1. Unggah Data Hotspot")
+csv_file = st.sidebar.file_uploader("❗Unggah data hotspot format .csv❗", type=["csv"])
 
 # --- 2. Shapefile (Fixed Path) ---
 st.sidebar.header("2. Shapefile")
@@ -26,26 +26,27 @@ st.sidebar.markdown(f"**Shapefile:** `{SHAPEFILE_PATH}`")
 
 if csv_file:
     # Load CSV
-    with st.spinner("Loading CSV data..."):
+    with st.spinner("Memuat data CSV..."):
         df = pd.read_csv(csv_file)
         df['acq_date'] = pd.to_datetime(df['acq_date'])
-    st.success("CSV data loaded successfully 🎉.")
+    st.success("Data CSV berhasil dimuat 🎉.")
 
     # Load Shapefile
     try:
         gdf_boundary = gpd.read_file(SHAPEFILE_PATH)
-        st.success("Shapefile loaded successfully 🎉.")
+        st.success("Shapefile berhasil dimuat 🎉.")
     except Exception as e:
-        st.error(f"Error loading shapefile: {e}")
+        st.error(f"Terjadi kesalahan saat memuat shapefile: {e}")
         st.stop()
 
     # --- 3. Spatial Cleaning ---
-    st.header("Spatial Cleaning Hotspot")
+    st.header("1️⃣ Pembersihan Koordinat Hotspot Dengan Lahan Gambut Sumatera Selatan")
     df['geometry'] = df.apply(lambda x: Point(x['longitude'], x['latitude']), axis=1)
     gdf = gpd.GeoDataFrame(df, geometry='geometry', crs=gdf_boundary.crs)
     boundary_union = gdf_boundary.unary_union
     gdf_clean = gdf[gdf.within(boundary_union)].copy()
-    st.write(f"📌 Records before cleaning: {len(gdf)}. \n 📌 after cleaning: {len(gdf_clean)}")
+    st.write(f"📌 Data sebelum dibersihkan \t: {len(gdf)}")
+    st.write(f"📌 Setelah dibersihkan \t\t: {len(gdf_clean)}")
     st.map(gdf_clean[['latitude', 'longitude']])
 
     # --- 4. Preprocessing ---
