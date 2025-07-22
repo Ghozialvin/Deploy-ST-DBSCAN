@@ -8,3 +8,5 @@ geopandas
 shapely
 streamlit
 matplotlib
+folium
+streamlit-folium
