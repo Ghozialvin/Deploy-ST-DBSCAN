@@ -12,11 +12,11 @@ from shapely.geometry import Point
 
 # Streamlit App Configuration
 st.set_page_config(page_title="ST-DBSCAN Streamlit App", layout="wide")
-st.title("Spatio-Temporal DBSCAN Clustering Application")
+st.title("Application Clustering Spatio-Temporal Hotspot Dilahan Gambut Sumatera Selatan Menggunakan Algoritma ST-DBSCAN Dengan Optimasi Parameter")
 
 # --- 1. Upload Data (CSV) ---
-st.sidebar.header("1. Upload Hotspot CSV Data")
-csv_file = st.sidebar.file_uploader("Upload hotspot CSV data", type=["csv"])
+st.sidebar.header("1. Upload Data Hotspot CSV ")
+csv_file = st.sidebar.file_uploader("❗Upload data hotspot CSV❗", type=["csv"])
 
 # --- 2. Shapefile (Fixed Path) ---
 st.sidebar.header("2. Shapefile")
@@ -29,23 +29,23 @@ if csv_file:
     with st.spinner("Loading CSV data..."):
         df = pd.read_csv(csv_file)
         df['acq_date'] = pd.to_datetime(df['acq_date'])
-    st.success("CSV data loaded successfully.")
+    st.success("CSV data loaded successfully 🎉.")
 
     # Load Shapefile
     try:
         gdf_boundary = gpd.read_file(SHAPEFILE_PATH)
-        st.success("Shapefile loaded successfully.")
+        st.success("Shapefile loaded successfully 🎉.")
     except Exception as e:
         st.error(f"Error loading shapefile: {e}")
         st.stop()
 
     # --- 3. Spatial Cleaning ---
-    st.header("Spatial Cleaning")
+    st.header("Spatial Cleaning Hotspot")
     df['geometry'] = df.apply(lambda x: Point(x['longitude'], x['latitude']), axis=1)
     gdf = gpd.GeoDataFrame(df, geometry='geometry', crs=gdf_boundary.crs)
     boundary_union = gdf_boundary.unary_union
     gdf_clean = gdf[gdf.within(boundary_union)].copy()
-    st.write(f"Records before cleaning: {len(gdf)}, after cleaning: {len(gdf_clean)}")
+    st.write(f"📌 Records before cleaning: {len(gdf)}. \n 📌 after cleaning: {len(gdf_clean)}")
     st.map(gdf_clean[['latitude', 'longitude']])
 
     # --- 4. Preprocessing ---
