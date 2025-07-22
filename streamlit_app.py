@@ -12,7 +12,6 @@ from shapely.geometry import Point
 # Judul Aplikasi
 st.title("ST-DBSCAN Hotspot Clustering dengan Boundary Filter Lokal")
 
-
 # ===== Parameter =====
 # 1. Pilih Epsilon2 (temporal)
 eps2 = st.selectbox(
@@ -38,7 +37,7 @@ if df_file is not None:
 
     # ===== Filter menggunakan shapefile lokal =====
     try:
-        shapefile_path = "./Data_shapefile/gambutsumsel.shp"  # Path ke shapefile di folder project
+        shapefile_path = "./Data_shapefile/gambutsumsel.shp"
         gdf_boundary = gpd.read_file(shapefile_path)
         boundary_union = gdf_boundary.unary_union
         df["geometry"] = df.apply(lambda r: Point(r.longitude, r.latitude), axis=1)
@@ -46,21 +45,16 @@ if df_file is not None:
         df = gdf[gdf.within(boundary_union)].drop(columns=["geometry"])
         st.write(f"🔹 Titik dalam boundary: {df.shape[0]} dari total {len(df) + 0}")
     except Exception as e:
-        st.warning(f"Gagal membaca shapefile lokal: {e}. Proses clustering akan tetap dilanjutkan tanpa filter boundary.")
+        st.warning(f"Gagal membaca shapefile lokal: {e}. Proses clustering dilanjutkan tanpa filter.")
 
     # ===== Preprocessing tanggal =====
     df["acq_date"] = pd.to_datetime(df["acq_date"], errors="coerce")
     df = df.dropna(subset=["acq_date"])
-    # Buat kolom timestamp (hari sejak epoch)
-    df["timestamp"] = ((df["acq_date"] - pd.Timestamp("1970-01-01"))
-                        / pd.Timedelta("1D")).astype(int)
+    df["timestamp"] = ((df["acq_date"] - pd.Timestamp("1970-01-01")) / pd.Timedelta("1D")).astype(int)
 
     # ===== Hitung parameter ST-DBSCAN =====
-    # MinPts berdasarkan log(n)
     n = len(df)
     minpts = max(1, round(math.log(n)))
-
-    # Hitung ε1 (spatial+temporal k-distance)
     X_k = np.column_stack([df.latitude.values, df.longitude.values, df.timestamp.values])
     dist_mat = cdist(X_k, X_k, metric="euclidean")
     def avg_k(mat, K):
@@ -74,35 +68,27 @@ if df_file is not None:
 
     # ===== Fit ST-DBSCAN =====
     idx = pd.MultiIndex.from_arrays([df.index, df.timestamp], names=["event_id", "timestamp"])
-    fit_df = pd.DataFrame(df[["longitude", "latitude"]].values,
-                          columns=["x", "y"], index=idx)
-    model = STDBSCAN(
-        eps1=eps1,
-        eps2=eps2,
-        min_samples=minpts,
-        metric="euclidean",
-        n_jobs=-1
-    )
+    fit_df = pd.DataFrame(df[["longitude", "latitude"]].values, columns=["x", "y"], index=idx)
+    model = STDBSCAN(eps1=eps1, eps2=eps2, min_samples=minpts, metric="euclidean", n_jobs=-1)
     model.fit(fit_df)
     df["cluster"] = model.labels_
 
     # ===== Evaluasi =====
-    mask = df["cluster"] != -1
-    if mask.sum() > 0:
+    unique_clusters = set(df.cluster)
+    n_clusters = len(unique_clusters) - (1 if -1 in unique_clusters else 0)
+    mask = df.cluster != -1
+    if n_clusters > 1 and mask.sum() > 1:
         X_eval = np.column_stack([df.latitude[mask], df.longitude[mask], df.timestamp[mask]])
         sil = silhouette_score(X_eval, df.cluster[mask])
         dbi = davies_bouldin_score(X_eval, df.cluster[mask])
-        st.write(f"🏷️ Jumlah cluster (excl. noise): {len(set(df.cluster)) - (1 if -1 in df.cluster.values else 0)}")
+        st.write(f"🏷️ Jumlah cluster (excl. noise): {n_clusters}")
         st.write(f"📃 Silhouette Coefficient: {sil:.4f}")
         st.write(f"🔍 Davies–Bouldin Index: {dbi:.4f}")
     else:
-        st.warning("Semua titik dianggap noise, tidak ada cluster untuk dievaluasi.")
+        st.warning("Tidak cukup cluster (minimal 2) untuk evaluasi Silhouette/DB Index.")
 
     # ===== Tampilkan & Unduh =====
     st.subheader("Hasil Clustering")
     st.dataframe(df)
     csv_out = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        "📥 Unduh Hasil CSV", data=csv_out,
-        file_name="hasil_clustering.csv", mime='text/csv'
-    )
+    st.download_button("📥 Unduh Hasil CSV", data=csv_out, file_name="hasil_clustering.csv", mime='text/csv')
