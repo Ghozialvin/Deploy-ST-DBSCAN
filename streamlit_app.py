@@ -130,7 +130,7 @@ if csv_file:
     k_dist = avg_k_dist(minpts)
     points = np.arange(1, len(k_dist)+1)
 
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(2, 4))
     ax.plot(points, k_dist, marker='.')
     knee = KneeLocator(points, k_dist, curve='convex', direction='increasing').knee
     if knee:
