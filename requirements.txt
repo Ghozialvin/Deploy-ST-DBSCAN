@@ -7,3 +7,4 @@ kneed
 geopandas
 shapely
 streamlit
+matplotlib
