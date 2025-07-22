@@ -6,105 +6,99 @@ from scipy.spatial.distance import cdist
 from sktime.clustering.spatio_temporal import STDBSCAN
 from sklearn.metrics import silhouette_score, davies_bouldin_score
 from kneed import KneeLocator
-from shapely.geometry import Point
 
 # Judul Aplikasi
 st.title("ST-DBSCAN Hotspot Clustering")
 
 # 1. Upload data CSV
+eps2 = st.selectbox(
+    "1. Pilih Epsilon2 (temporal) dalam hari:", 
+    [3, 7, 30],
+    index=0
+)
 uploaded_file = st.file_uploader(
-    "1. Upload file CSV hotspot (harus memuat kolom latitude, longitude, acq_date)", 
+    "2. Upload file CSV hotspot (harus memuat kolom latitude, longitude, acq_date)", 
     type="csv"
 )
 
-# 2. Pilih parameter Epsilon2 (jarak temporal dalam hari)
-eps2 = st.selectbox(
-    "2. Pilih Epsilon2 (temporal) dalam hari:", 
-    [3, 7, 30]
-)
-
 if uploaded_file is not None:
-    # 3. Baca data
     df = pd.read_csv(uploaded_file)
-    # Normalisasi nama kolom: hapus spasi dan lowercase
     df.columns = df.columns.str.strip().str.lower()
-
-    # Cek kolom wajib
     required = ["latitude", "longitude", "acq_date"]
     missing = [col for col in required if col not in df.columns]
     if missing:
         st.error(f"Kolom wajib tidak ditemukan: {', '.join(missing)}")
+        st.stop()
+
+    # Drop missing
+    df = df.dropna(subset=required)
+
+    # Konversi acq_date ke datetime
+    try:
+        df["acq_date"] = pd.to_datetime(df["acq_date"])
+    except Exception as e:
+        st.error(f"Gagal konversi kolom acq_date: {e}")
+        st.stop()
+
+    # Buat kolom timestamp (nilai numerik dalam hari sejak epoch)
+    df["timestamp"] = ((df["acq_date"] - pd.Timestamp("1970-01-01"))
+                        / pd.Timedelta("1D")).astype(int)
+
+    # Hitung MinPts
+    n = df.shape[0]
+    minpts = max(1, round(math.log(n)))
+
+    # Hitung Epsilon1 (spatial+temporal) menggunakan k-distance
+    X_kdist = np.column_stack([
+        df["latitude"].values,
+        df["longitude"].values,
+        df["timestamp"].values
+    ])
+    dist_mat = cdist(X_kdist, X_kdist, metric="euclidean")
+    def avg_k_distances(mat, K):
+        idx = np.argsort(mat, axis=1)[:, 1:K+1]
+        dists = np.array([[mat[i, j] for j in idx[i]] for i in range(len(mat))])
+        return dists.mean(axis=1)
+    avg_dist = np.sort(avg_k_distances(dist_mat, minpts))
+    pts = np.arange(1, len(avg_dist) + 1)
+    knee = KneeLocator(pts, avg_dist, curve='convex', direction='increasing').knee
+    eps1 = float(avg_dist[knee-1]) if knee else float(avg_dist.mean())
+    st.write(f"🔵 ε1 spatial+temporal = {eps1:.4f} (knee at {knee if knee else 'mean'})")
+
+    # Run ST-DBSCAN
+    coords = df[["longitude", "latitude"]].values
+    ts = df["timestamp"].values
+    index = pd.MultiIndex.from_arrays([df.index, ts], names=["event_id", "timestamp"])
+    df_fit = pd.DataFrame(coords, columns=["x","y"], index=index)
+
+    clustering = STDBSCAN(
+        eps1=eps1,
+        eps2=eps2,
+        min_samples=minpts,
+        metric="euclidean",
+        n_jobs=-1
+    )
+    clustering.fit(df_fit)
+    df["cluster"] = clustering.labels_
+
+    # Evaluasi tanpa noise
+    mask = df["cluster"] != -1
+    if mask.sum() > 0:
+        X_eval = np.column_stack([
+            df.loc[mask, "latitude"].values,
+            df.loc[mask, "longitude"].values,
+            df.loc[mask, "timestamp"].values
+        ])
+        sil = silhouette_score(X_eval, df.loc[mask, "cluster"].values)
+        dbi = davies_bouldin_score(X_eval, df.loc[mask, "cluster"].values)
+        st.write(f"🏷️ Jumlah cluster: {len(set(df['cluster'])) - (1 if -1 in df['cluster'].values else 0)}")
+        st.write(f"📃 Silhouette Coefficient: {sil:.4f}")
+        st.write(f"🔍 Davies–Bouldin Index: {dbi:.4f}")
     else:
-        # 4. Drop missing pada kolom wajib
-        df = df.dropna(subset=required)
+        st.warning("Semua titik dianggap noise, tidak ada cluster untuk dievaluasi.")
 
-        # 5. Preprocessing tanggal
-        try:
-            df["acq_date"] = pd.to_datetime(df["acq_date"])  # asumsi format YYYY-MM-DD atau serupa
-            df["acq_date"] = df["acq_date"].dt.strftime("%Y%m%d").astype(int)
-        except Exception as e:
-            st.error(f"Gagal konversi kolom acq_date: {e}")
-            st.stop()
-
-        # 6. Hitung MinPts (log(n))
-        n = df.shape[0]
-        minpts = max(1, round(math.log(n)))
-
-        # 7. Hitung Epsilon1 melalui K-Distance dan KneeLocator
-        X = df[["latitude", "longitude", "acq_date"]].values
-        distance_matrix = cdist(X, X, "euclidean")
-        def avg_k_distances(mat, K):
-            idx = np.argsort(mat, axis=1)[:, 1:K+1]
-            dists = np.array([[mat[i, j] for j in idx[i]] for i in range(len(mat))])
-            return dists.mean(axis=1)
-        avg_dist = np.sort(avg_k_distances(distance_matrix, minpts))
-        pts = np.arange(1, len(avg_dist) + 1)
-        knee = KneeLocator(pts, avg_dist, curve='convex', direction='increasing').knee
-        if knee:
-            eps1 = float(avg_dist[knee-1])
-        else:
-            eps1 = float(avg_dist.mean())
-        st.write(f"🔵 DITEMUKAN ε1 = {eps1:.4f} pada titik ke-{knee if knee else 'mean'}")
-
-        # 8. Jalankan ST-DBSCAN
-        coords = df[["longitude", "latitude"]].values
-        timestamps = df["acq_date"].values
-        index = pd.MultiIndex.from_arrays(
-            [df.index, timestamps], names=["event_id", "timestamp"]
-        )
-        fit_df = pd.DataFrame(coords, columns=["x", "y"], index=index)
-
-        clustering = STDBSCAN(
-            eps1=eps1,
-            eps2=eps2,
-            min_samples=minpts,
-            metric="euclidean",
-            n_jobs=-1
-        )
-        clustering.fit(fit_df)
-        labels = clustering.labels_
-        df["cluster"] = labels
-
-        # 9. Evaluasi (tanpa noise)
-        mask = labels != -1
-        if mask.sum() > 0:
-            sil = silhouette_score(X[mask], labels[mask])
-            dbi = davies_bouldin_score(X[mask], labels[mask])
-            st.write(f"❗ Jumlah cluster: {len(set(labels)) - (1 if -1 in labels else 0)}")
-            st.write(f"📃 Silhouette Coefficient: {sil:.4f}")
-            st.write(f"🔍 Davies–Bouldin Index: {dbi:.4f}")
-        else:
-            st.warning("Semua titik dianggap noise, tidak ada cluster untuk dievaluasi.")
-
-        # 10. Tampilkan hasil tabel
-        st.subheader("🔎 Tabel Hasil Clustering")
-        st.dataframe(df)
-
-        # 11. Unduh hasil sebagai CSV
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Unduh Hasil Cluster sebagai CSV",
-            data=csv,
-            file_name='hasil_clustering.csv',
-            mime='text/csv'
-        )
+    # Tampilkan dan download
+    st.subheader("🔎 Tabel Hasil Clustering")
+    st.dataframe(df)
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Unduh CSV", data=csv, file_name='hasil.csv', mime='text/csv')
