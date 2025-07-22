@@ -106,17 +106,14 @@ if csv_file:
     ax.legend()
     st.pyplot(fig, use_container_width=True)
     
-     # Input Parameter dari User di Sidebar
-    st.sidebar.subheader("Parameter Clustering")
-    eps1_slider = st.sidebar.slider("Sesuaikan Parameter Epsilon 1", float(k_dist.min()), float(k_dist.max()), float(eps1))
-    eps2_selection = st.sidebar.selectbox(
-        "Pilih Parameter Epsilon 2 (Hari)",
-        options=[3, 7, 30])
+    # Input Parameter dari User di Sidebar
+    eps1_slider = st.sidebar.slider("Parameter Epsilon 1", float(k_dist.min()), float(k_dist.max()), float(eps1))
+    eps2_slider = st.sidebar.number_input("Sesuaikan Parameter Epsilon 2 (Hari)", min_value=1, max_value=30, value=3)
 
     # --- 4. Clustering ST-DBSCAN ---
     st.header("4️⃣ Clustering ST-DBSCAN")
     df_idx = pd.DataFrame(hotspot[['longitude', 'latitude']].values, columns=['x', 'y'], index=pd.MultiIndex.from_arrays([hotspot.index, hotspot['acq_date']], names=['event_id', 'timestamp']))
-    clusterer = STDBSCAN(eps1=eps1_slider, eps2=eps2_selection, min_samples=minpts, metric='euclidean', n_jobs=-1)
+    clusterer = STDBSCAN(eps1=eps1_slider, eps2=eps2_slider, min_samples=minpts, metric='euclidean', n_jobs=-1)
     clusterer.fit(df_idx)
     hotspot['cluster'] = clusterer.labels_
 
