@@ -45,25 +45,25 @@ if csv_file:
     gdf = gpd.GeoDataFrame(df, geometry='geometry', crs=gdf_boundary.crs)
     boundary_union = gdf_boundary.unary_union
     gdf_clean = gdf[gdf.within(boundary_union)].copy()
-    st.write(f"📌 Data sebelum dibersihkan \t: {len(gdf)}")
-    st.write(f"📌 Setelah dibersihkan \t\t: {len(gdf_clean)}")
+    st.write(f"📌 Dimensi data sebelum dibersihkan : {len(gdf)}")
+    st.write(f"📌 Dimensi data Setelah dibersihkan : {len(gdf_clean)}")
     st.map(gdf_clean[['latitude', 'longitude']])
 
     # --- 4. Preprocessing ---
-    st.header("Preprocessing")
+    st.header("2️⃣ Prapemrosesan Data (Preprocessing)")
     drop_cols = ["brightness","scan","track","satellite","instrument",
                  "version","bright_t31","frp","daynight","type","confidence","acq_time","geometry"]
     data = gdf_clean.drop(columns=[c for c in drop_cols if c in gdf_clean.columns])
     data['acq_date'] = data['acq_date'].dt.strftime("%Y%m%d").astype(int)
-    st.write("Selected features:", data.columns.tolist())
+    st.write("Pemilihan fitur (feature selection):", data.columns.tolist())
     st.dataframe(data.head())
 
     # --- 5. Parameter Estimation ---
-    st.header("Parameter Estimation")
+    st.header(" 3️⃣ Pemilihan Parameter ST-DBSCAN")
     hotspot = data.copy()
     n_samples = len(hotspot)
     minpts = max(2, round(math.log(n_samples)))
-    st.write(f"Estimated MinPts: {minpts}")
+    st.write(f"📌 Nilai Parameter MinPts : {minpts}")
 
     # Compute k-distance plot
     X = hotspot[['latitude','longitude','acq_date']].values
@@ -81,18 +81,18 @@ if csv_file:
     if knee:
         eps1 = k_dist[knee-1]
         ax.axhline(eps1, linestyle='--', label=f"eps1={eps1:.3f}")
-        st.write(f"Detected eps1 at index {knee}: {eps1:.3f}")
+        st.write(f"📌 Terdeteksi Nilai Parameter Epsilon1 Pada Indeks {knee}: {eps1:.3f}")
     ax.set_xlabel('Data Points (sorted)')
     ax.set_ylabel(f'Avg distance to {minpts} NN')
     ax.legend()
     st.pyplot(fig)
 
     # User adjusts eps1 & eps2
-    eps1_slider = st.sidebar.slider("Spatial eps1", float(k_dist.min()), float(k_dist.max()), float(eps1))
-    eps2_slider = st.sidebar.number_input("Temporal eps2 (days)", min_value=1, max_value=30, value=3)
+    eps1_slider = st.sidebar.slider("Parameter Epsilon 1", float(k_dist.min()), float(k_dist.max()), float(eps1))
+    eps2_slider = st.sidebar.number_input("Parameter Epsilon 2 (Hari)", min_value=1, max_value=30, value=3)
 
     # --- 6. ST-DBSCAN Clustering ---
-    st.header("ST-DBSCAN Clustering")
+    st.header("4️4️⃣ Clustering ST-DBSCAN ")
     df_idx = pd.DataFrame(
         hotspot[['longitude','latitude']].values,
         columns=['x','y'],
@@ -102,8 +102,8 @@ if csv_file:
     clusterer.fit(df_idx)
     hotspot['cluster'] = clusterer.labels_
 
-    st.write("Total clusters:", len(set(clusterer.labels_)) - ( -1 in clusterer.labels_))
-    st.write("Noise points:", sum(clusterer.labels_ == -1))
+    st.write("Total Clusters:", len(set(clusterer.labels_)) - ( -1 in clusterer.labels_))
+    st.write("Total Noise :", sum(clusterer.labels_ == -1))
     counts = hotspot['cluster'].value_counts().rename_axis('cluster').reset_index(name='count')
     st.dataframe(counts)
 
@@ -113,7 +113,7 @@ if csv_file:
     st.pyplot(fig2)
 
     # --- 7. Evaluation ---
-    st.header("Evaluation")
+    st.header("5️⃣ Evaluasi Hasil Clustering")
     mask = hotspot['cluster'] != -1
     if mask.sum() > 0:
         X_eval = np.column_stack([
@@ -124,10 +124,10 @@ if csv_file:
         y_eval = hotspot.loc[mask,'cluster']
         sil = silhouette_score(X_eval, y_eval)
         db = davies_bouldin_score(X_eval, y_eval)
-        st.write(f"Silhouette Coefficient: {sil:.4f}")
-        st.write(f"Davies-Bouldin Index: {db:.4f}")
+        st.write(f"📌 Silhouette Coefficient : {sil:.4f}")
+        st.write(f"📌 Davies-Bouldin Index : {db:.4f}")
     else:
-        st.write("No clusters to evaluate (all noise).")
+        st.write("Tidak ada klaster yang perlu dievaluasi (semua noise).")
 
 else:
     st.info("Silakan upload CSV hotspot untuk memulai aplikasi.")
