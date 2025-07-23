@@ -143,8 +143,10 @@ if csv_file:
     st.pyplot(fig,use_container_width=True)
 
     # User adjusts eps1 & eps2
-    eps1_slider = st.sidebar.slider("Parameter Epsilon 1", float(k_dist.min()), float(k_dist.max()), float(eps1))
-    eps2_slider = st.sidebar.number_input("Parameter Epsilon 2 (Hari)", min_value=1, max_value=30, value=3)
+    # Input Parameter dari User di Sidebar
+    st.sidebar.subheader("Parameter Clustering")
+    st.sidebar.metric(label="Parameter Epsilon 1 (Otomatis)", value=f"{eps1:.4f}")
+    eps2_slider = st.sidebar.selectbox( "Pilih Parameter Epsilon 2 (Hari)", options=[3, 7, 30])
 
     # --- 6. ST-DBSCAN Clustering ---
     st.header("4️⃣ Clustering ST-DBSCAN ")
@@ -153,7 +155,7 @@ if csv_file:
         columns=['x','y'],
         index=pd.MultiIndex.from_arrays([hotspot.index, hotspot['acq_date']], names=['event_id','timestamp'])
     )
-    clusterer = STDBSCAN(eps1=eps1_slider, eps2=eps2_slider, min_samples=minpts, metric='euclidean', n_jobs=-1)
+    clusterer = STDBSCAN(eps1=eps1, eps2=eps2_slider, min_samples=minpts, metric='euclidean', n_jobs=-1)
     clusterer.fit(df_idx)
     hotspot['cluster'] = clusterer.labels_
 
