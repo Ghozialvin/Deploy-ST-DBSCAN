@@ -174,43 +174,33 @@ if csv_file:
     
     # --- Menghitung dan Menampilkan Ringkasan Core, Border, Noise ---
     st.subheader("Ringkasan Titik Core, Border, dan Noise per Cluster")
-
-    # Dapatkan indeks core samples dari hasil clustering
     core_samples_mask = np.zeros_like(clusterer.labels_, dtype=bool)
     core_samples_mask[clusterer.core_sample_indices_] = True
-
-    # Tambahkan kolom baru 'point_type' ke dataframe hotspot
     hotspot['point_type'] = 'Noise' # Default untuk semua titik
     hotspot.loc[core_samples_mask, 'point_type'] = 'Core'
     # Border adalah titik yang punya cluster (bukan -1) tapi bukan Core
     is_border = (hotspot['cluster'] != -1) & (~core_samples_mask)
     hotspot.loc[is_border, 'point_type'] = 'Border'
-
-    # Buat tabel ringkasan menggunakan groupby dan value_counts
     summary_df = hotspot.groupby('cluster')['point_type'].value_counts().unstack(fill_value=0)
-
-    # Pastikan semua kolom (Core, Border, Noise) ada, jika tidak tambahkan dengan nilai 0
     for col in ['Core', 'Border', 'Noise']:
         if col not in summary_df.columns:
             summary_df[col] = 0
-
-    # Ubah nama kolom dan urutkan
     summary_df = summary_df.rename(columns={'Core': 'Core Points', 'Border': 'Border Points', 'Noise': 'Noise Points'})
     summary_df = summary_df[['Core Points', 'Border Points', 'Noise Points']]
     summary_df['Total'] = summary_df.sum(axis=1)
-
-    # Ganti label index -1 menjadi 'Noise' untuk tampilan yang lebih baik
     summary_df = summary_df.rename(index={-1: 'Noise'})
-
     st.dataframe(summary_df, use_container_width=True)
 
-    # Tambahkan tombol download untuk ringkasan ini di sidebar
-    st.sidebar.subheader("Download Ringkasan")
-    summary_csv_data = convert_df_to_csv(summary_df.reset_index().rename(columns={'cluster': 'Cluster'}))
+    # --- Tombol Download di Sidebar ---
+    st.sidebar.subheader("4. Download Hasil Clustering")
+    cols_to_download = ['latitude', 'longitude', 'acq_date', 'cluster', 'point_type']
+    df_for_download = hotspot[cols_to_download].copy()
+    df_for_download.rename(columns={'point_type': 'Point_Type'}, inplace=True)
+    full_csv_data = convert_df_to_csv(df_for_download)
     st.sidebar.download_button(
-       label="📥 Download Ringkasan Cluster (.csv)",
-       data=summary_csv_data,
-       file_name='ringkasan_cluster_hotspot.csv',
+       label="📥 Download Hasil Clustering (.csv)",
+       data=full_csv_data,
+       file_name='hasil_clustering.csv',
        mime='text/csv',
     )
 
