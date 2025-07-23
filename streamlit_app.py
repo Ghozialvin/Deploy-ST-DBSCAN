@@ -14,6 +14,12 @@ from shapely.geometry import Point
 from matplotlib.patches import Patch
 from matplotlib import colors as mcolors
 
+# Fungsi helper untuk konversi DataFrame ke CSV (dengan caching)
+@st.cache_data
+def convert_df_to_csv(df):
+    """Mengonversi DataFrame ke CSV dengan encoding utf-8."""
+    return df.to_csv(index=False).encode('utf-8')
+
 # Streamlit App Configuration
 st.set_page_config(page_title="ST-DBSCAN Streamlit App", layout="wide")
 st.title(">>> Aplikasi Clustering Spatio-Temporal Hotspot Dilahan Gambut Sumatera Selatan Menggunakan Algoritma ST-DBSCAN Dengan Optimasi Parameter <<<")
@@ -146,7 +152,7 @@ if csv_file:
 
     # User adjusts eps1 & eps2
     # Input Parameter dari User di Sidebar
-    st.sidebar.subheader("Parameter Clustering")
+    st.sidebar.subheader("3. Parameter ST_DBSCAN")
     st.sidebar.metric(label="Parameter Epsilon 1 (Otomatis)", value=f"{eps1:.4f}")
     eps2_slider = st.sidebar.selectbox( "Pilih Parameter Epsilon 2 (Hari)", options=[3, 7, 30])
 
@@ -165,6 +171,48 @@ if csv_file:
     st.write("🚫 Total Noise :", sum(clusterer.labels_ == -1))
     counts = hotspot['cluster'].value_counts().rename_axis('cluster').reset_index(name='count')
     st.dataframe(counts,use_container_width=True)
+    
+    # --- Menghitung dan Menampilkan Ringkasan Core, Border, Noise ---
+    st.subheader("Ringkasan Titik Core, Border, dan Noise per Cluster")
+
+    # Dapatkan indeks core samples dari hasil clustering
+    core_samples_mask = np.zeros_like(clusterer.labels_, dtype=bool)
+    core_samples_mask[clusterer.core_sample_indices_] = True
+
+    # Tambahkan kolom baru 'point_type' ke dataframe hotspot
+    hotspot['point_type'] = 'Noise' # Default untuk semua titik
+    hotspot.loc[core_samples_mask, 'point_type'] = 'Core'
+    # Border adalah titik yang punya cluster (bukan -1) tapi bukan Core
+    is_border = (hotspot['cluster'] != -1) & (~core_samples_mask)
+    hotspot.loc[is_border, 'point_type'] = 'Border'
+
+    # Buat tabel ringkasan menggunakan groupby dan value_counts
+    summary_df = hotspot.groupby('cluster')['point_type'].value_counts().unstack(fill_value=0)
+
+    # Pastikan semua kolom (Core, Border, Noise) ada, jika tidak tambahkan dengan nilai 0
+    for col in ['Core', 'Border', 'Noise']:
+        if col not in summary_df.columns:
+            summary_df[col] = 0
+
+    # Ubah nama kolom dan urutkan
+    summary_df = summary_df.rename(columns={'Core': 'Core Points', 'Border': 'Border Points', 'Noise': 'Noise Points'})
+    summary_df = summary_df[['Core Points', 'Border Points', 'Noise Points']]
+    summary_df['Total'] = summary_df.sum(axis=1)
+
+    # Ganti label index -1 menjadi 'Noise' untuk tampilan yang lebih baik
+    summary_df = summary_df.rename(index={-1: 'Noise'})
+
+    st.dataframe(summary_df, use_container_width=True)
+
+    # Tambahkan tombol download untuk ringkasan ini di sidebar
+    st.sidebar.subheader("Download Ringkasan")
+    summary_csv_data = convert_df_to_csv(summary_df.reset_index().rename(columns={'cluster': 'Cluster'}))
+    st.sidebar.download_button(
+       label="📥 Download Ringkasan Cluster (.csv)",
+       data=summary_csv_data,
+       file_name='ringkasan_cluster_hotspot.csv',
+       mime='text/csv',
+    )
 
     # --- Visualisasi Hasil Clustering dengan Filter Tanggal ---
 
