@@ -11,6 +11,8 @@ from sktime.clustering.spatio_temporal import STDBSCAN
 from kneed import KneeLocator
 from scipy.spatial.distance import cdist
 from shapely.geometry import Point
+from matplotlib.patches import Patch
+from matplotlib import colors as mcolors
 
 # Streamlit App Configuration
 st.set_page_config(page_title="ST-DBSCAN Streamlit App", layout="wide")
