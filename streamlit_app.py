@@ -26,7 +26,7 @@ csv_file = st.sidebar.file_uploader("❗Unggah data hotspot format .csv❗", typ
 
 # --- 2. Shapefile (Fixed Path) ---
 st.sidebar.header("2. Shapefile")
-# Sesuaikan dengan struktur folder proyek Anda
+# Sesuaikan dengan struktur folder
 SHAPEFILE_PATH = "Data_shapefile/gambutsumsel.shp"
 st.sidebar.markdown(f"**Shapefile:** `{SHAPEFILE_PATH}`")
 
@@ -48,7 +48,7 @@ if csv_file:
     # --- 3. Spatial Cleaning ---
     st.header("1️⃣ Pembersihan Koordinat Hotspot Dengan Lahan Gambut Sumatera Selatan")
     SHAPEFILE_GAMBUT_PATH = "Data_shapefile/gambutsumsel.shp"
-    SHAPEFILE_SUMSEL_PATH = "Sumatera_Selatan/sumselkabupatenshp.shp" # <-- Ganti dengan path Anda
+    SHAPEFILE_SUMSEL_PATH = "Sumatera_Selatan/sumselkabupatenshp.shp" 
 
     # Muat data CSV jika belum ada
     if 'df' not in locals():
@@ -162,12 +162,75 @@ if csv_file:
     st.write("📊 Total Clusters:", len(set(clusterer.labels_)) - ( -1 in clusterer.labels_))
     st.write("🚫 Total Noise :", sum(clusterer.labels_ == -1))
     counts = hotspot['cluster'].value_counts().rename_axis('cluster').reset_index(name='count')
-    st.dataframe(counts)
+    st.dataframe(counts,use_container_width=True)
 
-    fig2, ax2 = plt.subplots()
-    ax2.scatter(hotspot['longitude'], hotspot['latitude'], c=hotspot['cluster'], cmap='tab20', s=10)
-    ax2.set_title('Cluster Assignments')
-    st.pyplot(fig2)
+    # --- Visualisasi Hasil Clustering dengan Filter Tanggal ---
+
+    # fig2, ax2 = plt.subplots()
+    # ax2.scatter(hotspot['longitude'], hotspot['latitude'], c=hotspot['cluster'], cmap='tab20', s=10)
+    # ax2.set_title('Cluster Assignments')
+    # st.pyplot(fig2)
+
+    st.subheader("🔗 Visualisasi Sebaran Cluster Hotspot")
+    hotspot['acq_datetime'] = pd.to_datetime(hotspot['acq_date'].astype(str), format='%Y%m%d')
+    min_date = hotspot['acq_datetime'].min().date()
+    max_date = hotspot['acq_datetime'].max().date()
+
+    selected_date_range = st.date_input("Pilih Rentang Waktu Untuk Visualisasi", value=(min_date, max_date), min_value=min_date, max_value=max_date, format="YYYY-MM-DD")
+    if len(selected_date_range) == 2:
+        start_dt, end_dt = pd.to_datetime(selected_date_range[0]), pd.to_datetime(selected_date_range[1])
+        mask_date = (hotspot['acq_datetime'] >= start_dt) & (hotspot['acq_datetime'] <= end_dt)
+        hotspot_filt = hotspot.loc[mask_date].copy()
+        total_points = len(hotspot_filt)
+
+        if total_points == 0:
+            st.info(f"Tidak ditemukan titik hotspot pada rentang waktu {start_dt.date()} hingga {end_dt.date()}.")
+        else:
+            counts_summary = {}
+            unique_labels = np.unique(hotspot_filt["cluster"])
+            for lab in unique_labels:
+                counts_summary["Noise" if lab == -1 else f"Cluster {lab}"] = np.sum(hotspot_filt["cluster"] == lab)
+            summary_str = ", ".join(f"{k}: {v}" for k, v in counts_summary.items())
+
+            gdf_hot_filt = gpd.GeoDataFrame(hotspot_filt, geometry=gpd.points_from_xy(hotspot_filt.longitude, hotspot_filt.latitude), crs="EPSG:4326")
+            
+            cluster_ids = sorted([lab for lab in unique_labels if lab != -1])
+            n_clusters = len(cluster_ids)
+            color_map = {-1: "#000000"} # Hitam untuk noise
+            if n_clusters > 0:
+                cmap_base = plt.get_cmap("Reds")
+                for i, lab in enumerate(cluster_ids):
+                    frac = 0.3 + 0.7 * (i / (n_clusters - 1)) if n_clusters > 1 else 0.7
+                    color_map[lab] = mcolors.to_hex(cmap_base(frac))
+
+            fig_detail, ax_detail = plt.subplots(figsize=(12, 12))
+            gdf_sumsel.plot(ax=ax_detail, facecolor="#FFF1CA", edgecolor="black", linewidth=0.8)
+            gdf_gambut.plot(ax=ax_detail, facecolor="#B6F500", edgecolor="black", linewidth=0.8, alpha=0.5)
+
+            for lab, col in color_map.items():
+                subset = gdf_hot_filt[gdf_hot_filt["cluster"] == lab]
+                if not subset.empty:
+                    subset.plot(ax=ax_detail, markersize=30, color=col, marker="o", edgecolor="k", linewidth=0.3)
+            
+            ax_detail.set_aspect('equal', adjustable='box')
+            ax_detail.set_xlabel("Longitude")
+            ax_detail.set_ylabel("Latitude")
+            ax_detail.grid(True, linestyle='--', alpha=0.5)
+            ax_detail.set_title(f"Sebaran Hotspot {start_dt.date()} s/d {end_dt.date()} — Total: {total_points} titik\nRingkasan: {summary_str}", fontsize=13)
+
+            legend_handles = [Patch(facecolor="#FFF1CA", edgecolor='black', label="Batas Kabupaten Sumsel"), Patch(facecolor="#B6F500", edgecolor='black', alpha=0.5, label="Lahan Gambut")]
+            for lab in sorted(color_map.keys()):
+                label_text = "Noise" if lab == -1 else f"Cluster {lab}"
+                legend_handles.append(Patch(facecolor=color_map[lab], edgecolor='black', label=label_text))
+            ax_detail.legend(handles=legend_handles, title="Legenda", loc='upper right', fontsize='small')
+
+            minx, miny, maxx, maxy = gdf_sumsel.total_bounds
+            ax_detail.set_xlim(minx, maxx)
+            ax_detail.set_ylim(miny, maxy)
+            plt.tight_layout()
+            st.pyplot(fig_detail, use_container_width=True)
+    else:
+        st.warning("Silakan pilih rentang waktu yang valid (tanggal mulai dan akhir).")
 
     # --- 7. Evaluation ---
     st.header("5️⃣ Evaluasi Hasil Clustering")
