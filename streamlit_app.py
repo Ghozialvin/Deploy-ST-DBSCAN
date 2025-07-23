@@ -178,7 +178,7 @@ if csv_file:
     min_date = hotspot['acq_datetime'].min().date()
     max_date = hotspot['acq_datetime'].max().date()
 
-    selected_date_range = st.date_input("Pilih Rentang Waktu Untuk Visualisasi", value=(min_date, max_date), min_value=min_date, max_value=max_date, format="YYYY-MM-DD")
+    selected_date_range = st.date_input("⏩ Pilih Rentang Waktu Untuk Visualisasi ⏪", value=(min_date, max_date), min_value=min_date, max_value=max_date, format="YYYY-MM-DD")
     if len(selected_date_range) == 2:
         start_dt, end_dt = pd.to_datetime(selected_date_range[0]), pd.to_datetime(selected_date_range[1])
         mask_date = (hotspot['acq_datetime'] >= start_dt) & (hotspot['acq_datetime'] <= end_dt)
