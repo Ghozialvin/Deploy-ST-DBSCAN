@@ -304,7 +304,7 @@ if csv_file:
 
         # KONDISI PENTING: Evaluasi hanya bisa berjalan jika ada lebih dari 1 klaster
         if n_clusters_found > 1:
-            st.write(f"Ditemukan **{n_clusters_found} klaster** yang akan dievaluasi.")
+            st.write(f"Ditemukan **{n_clusters_found} cluster** yang akan dievaluasi.")
             try:
                 sil = silhouette_score(X_eval, y_eval)
                 db = davies_bouldin_score(X_eval, y_eval)
@@ -314,18 +314,18 @@ if csv_file:
                 col1.metric(
                     label="🔎 Silhouette Coefficient", 
                     value=f"{sil:.4f}",
-                    help="Skor antara -1 dan 1. Semakin mendekati 1, semakin baik pemisahan klasternya."
+                    help="Skor antara -1 dan 1. Semakin mendekati 1, semakin baik pemisahan clusternya."
                 )
                 col2.metric(
                     label="🔎 Davies-Bouldin Index", 
                     value=f"{db:.4f}",
-                    help="Skor non-negatif. Semakin mendekati 0, semakin baik kualitas klasternya."
+                    help="Skor non-negatif. Semakin mendekati 0, semakin baik kualitas clusternya."
                 )
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat menghitung skor evaluasi: {e}")
         else:
-            st.warning(f"⚠️ **Evaluasi tidak dapat dilakukan.** Hanya ditemukan {n_clusters_found} klaster. Metrik evaluasi memerlukan minimal 2 klaster untuk perbandingan.")
+            st.warning(f"⚠️ **Evaluasi tidak dapat dilakukan.** Hanya ditemukan {n_clusters_found} cluster. Metrik evaluasi memerlukan minimal 2 cluster untuk perbandingan.")
     else:
-        st.info("Tidak ada klaster yang terbentuk (semua titik dianggap noise), sehingga evaluasi tidak dapat dilakukan.")
+        st.info("Tidak ada cluster yang terbentuk (semua titik dianggap noise), sehingga evaluasi tidak dapat dilakukan.")
 else:
     st.info("Silakan upload CSV hotspot untuk memulai aplikasi.")
