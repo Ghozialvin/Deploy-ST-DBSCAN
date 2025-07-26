@@ -273,21 +273,59 @@ if csv_file:
         st.warning("Silakan pilih rentang waktu yang valid (tanggal mulai dan akhir).")
 
     # --- 7. Evaluation ---
+    # st.header("5️⃣ Evaluasi Hasil Clustering")
+    # mask = hotspot['cluster'] != -1
+    # if mask.sum() > 0:
+    #     X_eval = np.column_stack([
+    #         hotspot.loc[mask,'longitude'],
+    #         hotspot.loc[mask,'latitude'],
+    #         hotspot.loc[mask,'acq_date']
+    #     ])
+    #     y_eval = hotspot.loc[mask,'cluster']
+    #     sil = silhouette_score(X_eval, y_eval)
+    #     db = davies_bouldin_score(X_eval, y_eval)
+    #     st.write(f"🔎 Silhouette Coefficient : {sil:.4f}")
+    #     st.write(f"🔎 Davies-Bouldin Index : {db:.4f}")
+    # else:
+    #     st.write("Tidak ada klaster yang perlu dievaluasi (semua noise).")
+
+    # --- 7. Evaluation ---
     st.header("5️⃣ Evaluasi Hasil Clustering")
     mask = hotspot['cluster'] != -1
-    if mask.sum() > 0:
+    hotspot_clustered = hotspot[mask]
+    if not hotspot_clustered.empty:
         X_eval = np.column_stack([
-            hotspot.loc[mask,'longitude'],
-            hotspot.loc[mask,'latitude'],
-            hotspot.loc[mask,'acq_date']
+            hotspot_clustered['longitude'],
+            hotspot_clustered['latitude'],
+            hotspot_clustered['acq_date']
         ])
-        y_eval = hotspot.loc[mask,'cluster']
-        sil = silhouette_score(X_eval, y_eval)
-        db = davies_bouldin_score(X_eval, y_eval)
-        st.write(f"🔎 Silhouette Coefficient : {sil:.4f}")
-        st.write(f"🔎 Davies-Bouldin Index : {db:.4f}")
-    else:
-        st.write("Tidak ada klaster yang perlu dievaluasi (semua noise).")
+        y_eval = hotspot_clustered['cluster'].values
+        n_clusters_found = len(np.unique(y_eval))
 
+        # KONDISI PENTING: Evaluasi hanya bisa berjalan jika ada lebih dari 1 klaster
+        if n_clusters_found > 1:
+            st.write(f"Ditemukan **{n_clusters_found} klaster** yang akan dievaluasi.")
+            try:
+                sil = silhouette_score(X_eval, y_eval)
+                db = davies_bouldin_score(X_eval, y_eval)
+
+                # Tampilkan dengan st.metric untuk visual yang lebih baik
+                col1, col2 = st.columns(2)
+                col1.metric(
+                    label="🔎 Silhouette Coefficient", 
+                    value=f"{sil:.4f}",
+                    help="Skor antara -1 dan 1. Semakin mendekati 1, semakin baik pemisahan klasternya."
+                )
+                col2.metric(
+                    label="🔎 Davies-Bouldin Index", 
+                    value=f"{db:.4f}",
+                    help="Skor non-negatif. Semakin mendekati 0, semakin baik kualitas klasternya."
+                )
+            except Exception as e:
+                st.error(f"Terjadi kesalahan saat menghitung skor evaluasi: {e}")
+        else:
+            st.warning(f"⚠️ **Evaluasi tidak dapat dilakukan.** Hanya ditemukan {n_clusters_found} klaster. Metrik evaluasi memerlukan minimal 2 klaster untuk perbandingan.")
+    else:
+        st.info("Tidak ada klaster yang terbentuk (semua titik dianggap noise), sehingga evaluasi tidak dapat dilakukan.")
 else:
     st.info("Silakan upload CSV hotspot untuk memulai aplikasi.")
