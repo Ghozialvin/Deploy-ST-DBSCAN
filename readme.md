@@ -69,9 +69,9 @@ Lalu buka browser ke URL:
 
 ### Contoh Tampilan Aplikasi
 
-![Upload & Input Parameter](./docs/upload_parameter.png)
+![Upload & Input Parameter](./content/before.png)
 
-![Dashboard & Pembersihan Data](./docs/cleaning_dashboard.png)
+![Dashboard & Pembersihan Data](./content/after.png)
 
 ## 🔎 Penggunaan
 
